@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import numpy as np
 import torch
+import torch.nn.functional as F
 import xarray as xr
 import lightning as L
 from pathlib import Path
@@ -32,17 +33,61 @@ LIST_VAR = [f"{var}" for var in SINGLE_VAR]
 LIST_VAR += [f"{var}_{level}" for var in PRESS_VAR for level in PRESS_LEVEL]
 
 
+# ============================================================================
+# Preprocessing and Postprocessing Functions
+# ============================================================================
+
+def preprocess_crop_nc(ds, lat_min, lat_max, lon_min, lon_max):
+    """
+    Crop NetCDF dataset to specified latitude and longitude range.
+    
+    Args:
+        ds: xarray.Dataset object
+        lat_min, lat_max: Latitude range (degrees)
+        lon_min, lon_max: Longitude range (degrees)
+    
+    Returns:
+        Cropped xarray.Dataset
+    """
+    return ds.sel(latitude=slice(lat_min, lat_max), longitude=slice(lon_min, lon_max))
+
+
+def postprocess_resize_array(tensor, target_height, target_width):
+    """
+    Resize torch tensor to target spatial dimensions using bilinear interpolation.
+    
+    Args:
+        tensor: Input tensor with shape (channels, height, width)
+        target_height: Target height
+        target_width: Target width
+    
+    Returns:
+        Resized torch tensor with shape (channels, target_height, target_width)
+    """
+    if tensor.shape[-2:] == (target_height, target_width):
+        return tensor  # Already correct size
+
+    tensor = tensor.unsqueeze(0)
+    resized = F.interpolate(tensor, size=(target_height, target_width), mode='bilinear', align_corners=False)
+    return resized.squeeze(0)
+
+
+
 class MerraFull(Dataset):
     """Load MERRA-2 data from NetCDF files with z-score normalization."""
 
     def __init__(self, merra_path: Path,
-                 stat_path: Path = '/N/slate/tnn3/DucHGA/Foundation/Data/merra/base/merra_extend_statistics.xlsx',
-                 dataset: str = "train"):
+                 stat_path: Path = '/N/slate/tnn3/DucHGA/meteor-foundation/Data/merra/base/merra_extend_statistics.xlsx',
+                 dataset: str = "train",
+                 pre_process=None,
+                 post_process=None):
         """
         Args:
             merra_path: CSV file with 'Path' (input) and 'Label_path' (target) columns
             stat_path: Excel file with mean/std statistics for normalization
             dataset: Dataset split name (train/val/test)
+            pre_process: Function or list of functions to apply after opening NetCDF file
+            post_process: Function or list of functions to apply after creating numpy array
         """
         super().__init__()
         
@@ -57,11 +102,30 @@ class MerraFull(Dataset):
         # Extract mean and std arrays
         self.mean = stat["Mean"].to_numpy().reshape(-1, 1, 1)
         self.std = stat["Std"].to_numpy().reshape(-1, 1, 1)
+        
+        # Normalize pre_process and post_process to lists
+        self.pre_process = self._normalize_processors(pre_process)
+        self.post_process = self._normalize_processors(post_process)
+    
+    def _normalize_processors(self, processors):
+        """Convert single function or list of functions to list."""
+        if processors is None:
+            return []
+        elif callable(processors):
+            return [processors]
+        elif isinstance(processors, (list, tuple)):
+            return list(processors)
+        else:
+            raise TypeError(f"Expected function, list of functions, or None, got {type(processors)}")
 
     def _load_and_normalize(self, path: str) -> np.ndarray:
         """Load NetCDF file and apply z-score normalization."""
         try:
             with xr.open_dataset(path) as ds:
+                # Apply pre-processing functions
+                for processor in self.pre_process:
+                    ds = processor(ds)
+                
                 features = []
                 # Single-level variables
                 for var in SINGLE_VAR:
@@ -73,7 +137,17 @@ class MerraFull(Dataset):
             # Normalize: (x - mean) / std
             data = np.stack(features, axis=0)
             data = (data - self.mean) / self.std
-            return np.nan_to_num(data)
+            data = np.nan_to_num(data)
+            data = torch.from_numpy(data).to(torch.float32)
+
+            # Flip height axis (second-last axis)
+            data = torch.flip(data, dims=(-2,))
+            
+            # Apply post-processing functions
+            for processor in self.post_process:
+                data = processor(data)
+            
+            return data
         except Exception as e:
             print(f"[Error] Failed to load {path}: {e}")
             raise
@@ -86,8 +160,7 @@ class MerraFull(Dataset):
         row = self.data_table.iloc[idx]
         input_data = self._load_and_normalize(row["Path"])
         target_data = self._load_and_normalize(row["Label_path"])
-        return (torch.tensor(input_data, dtype=torch.float32),
-                torch.tensor(target_data, dtype=torch.float32))
+        return input_data, target_data
 
 
 class MerraDataModule(L.LightningDataModule):
@@ -100,6 +173,8 @@ class MerraDataModule(L.LightningDataModule):
                  batch_size: int = 32,
                  num_workers: int = None,
                  pin_memory: bool = True,
+                 pre_process=None,
+                 post_process=None,
                  **kwargs):
         """
         Args:
@@ -110,17 +185,19 @@ class MerraDataModule(L.LightningDataModule):
             batch_size: Batch size for dataloaders
             num_workers: Number of data loading workers (default: CPU count)
             pin_memory: Pin memory for GPU transfer
+            pre_process: Preprocessing function(s) to apply
+            post_process: Postprocessing function(s) to apply
             **kwargs: Additional arguments passed to dataset_class
         """
         super().__init__()
 
         # Create datasets
-        print(f"[MerraDataModule] Creating train dataset from {train_path}")
-        self.train_dataset = dataset_class(merra_path=train_path, dataset="train", **kwargs)
-        print(f"[MerraDataModule] Creating val dataset from {val_path}")
-        self.val_dataset = dataset_class(merra_path=val_path, dataset="val", **kwargs)
-        print(f"[MerraDataModule] Creating test dataset from {test_path}")
-        self.test_dataset = dataset_class(merra_path=test_path, dataset="test", **kwargs)
+        self.train_dataset = dataset_class(merra_path=train_path, dataset="train", 
+                                           pre_process=pre_process, post_process=post_process, **kwargs)
+        self.val_dataset = dataset_class(merra_path=val_path, dataset="val",
+                                         pre_process=pre_process, post_process=post_process, **kwargs)
+        self.test_dataset = dataset_class(merra_path=test_path, dataset="test",
+                                          pre_process=pre_process, post_process=post_process, **kwargs)
 
         # Configuration
         self.batch_size = batch_size
@@ -144,20 +221,28 @@ class MerraDataModule(L.LightningDataModule):
 
 if __name__ == "__main__":
 
+    # Create preprocessing function that crops to a specific region
+    def crop_to_region(ds):
+        return preprocess_crop_nc(ds, lat_min=0, lat_max=30, lon_min=100, lon_max=150)
+    
+    # Create postprocessing function that resizes to specific dimensions
+    def resize_to_60x80(array):
+        return postprocess_resize_array(array, target_height=60, target_width=80)
+
     # Test: Load and print batch shapes
-    dm = MerraDataModule(
-        train_path='/N/slate/tnn3/DucHGA/Foundation/Data/merra/dataset/sample.csv',
-        val_path='/N/slate/tnn3/DucHGA/Foundation/Data/merra/dataset/sample.csv',
-        test_path='/N/slate/tnn3/DucHGA/Foundation/Data/merra/dataset/sample.csv',
+    dm_with_processing = MerraDataModule(
+        train_path='/N/slate/tnn3/DucHGA/meteor-foundation/Data/merra/dataset/sample.csv',
+        val_path='/N/slate/tnn3/DucHGA/meteor-foundation/Data/merra/dataset/sample.csv',
+        test_path='/N/slate/tnn3/DucHGA/meteor-foundation/Data/merra/dataset/sample.csv',
+        pre_process=crop_to_region,
+        post_process=resize_to_60x80
     )
 
-    print("[Test] Getting train dataloader...")
-    train_loader = dm.train_dataloader()
-    print(f"[Test] Dataloader created with {len(train_loader)} batches")
+    train_loader = dm_with_processing.train_dataloader()
+
     
     for batch_idx, (input_batch, target_batch) in enumerate(train_loader):
         print(f"[Test] Batch {batch_idx}: Input {input_batch.shape}, Target {target_batch.shape}")
         if batch_idx == 0:
             break
     
-    print("[Test] Completed successfully")
