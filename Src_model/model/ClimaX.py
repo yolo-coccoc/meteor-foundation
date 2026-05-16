@@ -2,7 +2,7 @@
 # Licensed under the MIT license.
 
 import sys
-sys.path.insert(0, '/N/slate/tnn3/DucHGA/Foundation/Src_model')
+sys.path.insert(0, '/N/slate/tnn3/DucHGA/meteor-foundation/Src_model')
 
 
 from functools import lru_cache
@@ -12,13 +12,12 @@ import torch
 import torch.nn as nn
 from timm.models.vision_transformer import Block, PatchEmbed, trunc_normal_
 
-from Utils.pos_embed import (
+from utils.pos_embed import (
     get_1d_sincos_pos_embed_from_grid,
     get_2d_sincos_pos_embed,
 )
 
-from Utils.parallel_patch_embed import ParallelVarPatchEmbed
-
+from utils.parallel_patch_embed import ParallelVarPatchEmbed
 
 class ClimaX(nn.Module):
     """Implements the ClimaX model as described in the paper,
@@ -85,7 +84,7 @@ class ClimaX(nn.Module):
                     qkv_bias=True,
                     drop_path=dpr[i],
                     norm_layer=nn.LayerNorm,
-                    drop=drop_rate,
+                    # drop=drop_rate,
                 )
                 for i in range(depth)
             ]
@@ -191,7 +190,7 @@ class ClimaX(nn.Module):
         x = self.aggregate_variable_tokens(x)
         x = x + self.pos_embed
 
-        lead_time_emb = self.lead_time_embed(lead_times.unsqueeze(-1)).unsqueeze(1)
+        lead_time_emb = self.lead_time_embed(lead_times.unsqueeze(-1)).squeeze()
         x = x + lead_time_emb
         x = self.pos_drop(x)
 
@@ -214,6 +213,9 @@ class ClimaX(nn.Module):
         Returns:
             tuple: (loss, preds) where loss is None if metric is None.
         """
+
+        if variables is None:
+            variables = self.variable_names
         encoded = self.encode_input(x, lead_times, variables)
         preds = self.head(encoded)
         preds = self.unpatchify(preds)
@@ -223,3 +225,35 @@ class ClimaX(nn.Module):
             preds = preds[:, output_ids]
 
         return preds
+
+if __name__ == '__main__':
+    SINGLE_VAR = ["PS", "SLP", "PHIS"]
+
+    # Multi-level variables (pressure levels)
+    PRESS_VAR = ["H", "OMEGA", "QI", "QL", "QV", "RH", "T", "U", "V"]
+
+    # Pressure levels (hPa)
+    PRESS_LEVEL = [1000, 975, 950, 925, 900, 875, 850, 825, 800, 775, 750, 725,
+                700, 650, 600, 550, 500, 450, 400, 350, 300, 250, 200, 150, 100]
+
+    # Number of pressure levels
+    NUM_LEVELS = len(PRESS_LEVEL)
+
+    LIST_VAR = SINGLE_VAR + [f"{var}_{level}" for var in PRESS_VAR for level in PRESS_LEVEL]
+
+    model = ClimaX(
+        variable_names = LIST_VAR,
+        img_size=(60, 80),
+        patch_size=4,
+        embed_dim=256,
+        depth=4,
+        decoder_depth=4,
+        num_heads=4,
+        mlp_ratio=4.0,
+        drop_path=0.1,
+        drop_rate=0.1,)
+    
+    sample = torch.rand((64, 228, 60, 80))
+    lead_time = torch.tensor(1.0)
+    sample = model(sample, lead_time)
+    print(sample.shape)
