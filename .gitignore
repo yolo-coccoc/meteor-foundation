@@ -1,4 +1,7 @@
 Test.ipynb
+
 *.csv
 *.xlsx
+
 Data/
+model_result
