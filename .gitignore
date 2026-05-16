@@ -2,6 +2,7 @@ Test.ipynb
 
 *.csv
 *.xlsx
+*.pyc
 
 Data/
 model_result
