@@ -4,5 +4,6 @@ Test.ipynb
 *.xlsx
 *.pyc
 
+wandb/
 Data/
 model_result
