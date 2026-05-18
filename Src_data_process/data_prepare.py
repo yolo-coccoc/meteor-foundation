@@ -67,11 +67,11 @@ def add_label_paths_with_lead_time(df: pd.DataFrame,
 
 if __name__ == "__main__":
     # Input/Output paths
-    CSV_INPUT_PATH = "/N/slate/tnn3/DucHGA/Foundation/Data/merra/base/full_path.csv"
-    CSV_OUTPUT_PATH = "/N/slate/tnn3/DucHGA/Foundation/Data/merra/dataset/sample.csv"
+    CSV_INPUT_PATH = "/N/slate/tnn3/DucHGA/meteor-foundation/Data/merra/base/full_path.csv"
+    CSV_OUTPUT_PATH = "/N/slate/tnn3/DucHGA/meteor-foundation/Data/merra/dataset/sample.csv"
     
     # Lead time and time step configuration
-    LIST_LEAD_TIME = [1, 2, 3]  # Lead time multipliers
+    LIST_LEAD_TIME = [1]  # Lead time multipliers
     STEP = timedelta(hours=3)  # Time step (e.g., "3h" for MERRA2)
     
     # Column names
