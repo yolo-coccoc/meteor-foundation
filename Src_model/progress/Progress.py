@@ -1,14 +1,14 @@
 import os
+import torch
 
 import lightning as L
 import numpy as np
 import pandas as pd
-import torch
-from sklearn.metrics import mean_squared_error as MSE, mean_absolute_error as MAE, r2_score as R2
-from scipy.stats import pearsonr
+
 from torch.nn import MSELoss
 from torch.optim import AdamW
 
+from utils.metrics import mae, pearson_r, r2_score, rmse
 
 class RegressionModule(L.LightningModule):
     """Lightning module for regression with MSE loss and regression metrics logging."""
@@ -33,13 +33,11 @@ class RegressionModule(L.LightningModule):
 
     def _compute_metrics(self, true: np.ndarray, pred: np.ndarray) -> dict:
         """Compute PearsonR, R2, RMSE, and MAE."""
-        pearson_r, _ = pearsonr(true, pred)
-        rmse = np.sqrt(MSE(true, pred))
         return {
-            "cc": pearson_r,
-            "r2": R2(true, pred),
-            "rmse": rmse,
-            "mae": MAE(true, pred),
+            "cc": pearson_r(true, pred),
+            "r2": r2_score(true, pred),
+            "rmse": rmse(true, pred),
+            "mae": mae(true, pred),
         }
 
     def _log_step_metrics(self, loss: torch.Tensor, true: np.ndarray, pred: np.ndarray, prefix: str):
@@ -108,13 +106,10 @@ class RegressionModule(L.LightningModule):
         true = np.array(self.true_lists["test"])
 
         scoreboard = pd.DataFrame()
-        pearson_r, _ = pearsonr(true, pred)
-        rmse = np.sqrt(MSE(true, pred))
-        
-        scoreboard.loc["metrics", "cc"] = pearson_r
-        scoreboard.loc["metrics", "r2"] = R2(true, pred)
-        scoreboard.loc["metrics", "rmse"] = rmse
-        scoreboard.loc["metrics", "mae"] = MAE(true, pred)
+        scoreboard.loc["metrics", "cc"] = pearson_r(true, pred)
+        scoreboard.loc["metrics", "r2"] = r2_score(true, pred)
+        scoreboard.loc["metrics", "rmse"] = rmse(true, pred)
+        scoreboard.loc["metrics", "mae"] = mae(true, pred)
 
         if self.export_result:
             scoreboard.to_excel(os.path.join(self.out_dir, f"{self.export_result}.xlsx"))

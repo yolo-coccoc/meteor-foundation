@@ -12,16 +12,14 @@ def rmse(predictions: np.ndarray, targets: np.ndarray, eps: float = 1e-8) -> np.
     """Root mean square error over flattened prediction and target arrays."""
     predictions = predictions.flatten()
     targets = targets.flatten()
-    result = np.sqrt(np.mean((predictions - targets) ** 2) + eps)
-    return np.array(result)
+    return np.sqrt(np.mean((predictions - targets) ** 2) + eps)
 
 
 def mae(predictions: np.ndarray, targets: np.ndarray) -> np.ndarray:
     """Mean absolute error over flattened prediction and target arrays."""
     predictions = predictions.flatten()
     targets = targets.flatten()
-    result = np.mean(np.abs(predictions - targets))
-    return np.array(result)
+    return np.mean(np.abs(predictions - targets))
 
 
 def pearson_r(predictions: np.ndarray, targets: np.ndarray, eps: float = 1e-8) -> np.ndarray:
@@ -35,8 +33,7 @@ def pearson_r(predictions: np.ndarray, targets: np.ndarray, eps: float = 1e-8) -
     covariance = np.mean(predictions_centered * targets_centered)
     predictions_std = np.std(predictions)
     targets_std = np.std(targets)
-    result = covariance / (predictions_std * targets_std + eps)
-    return np.array(result)
+    return covariance / (predictions_std * targets_std + eps)
 
 
 def r2_score(predictions: np.ndarray, targets: np.ndarray, eps: float = 1e-8) -> np.ndarray:
@@ -46,5 +43,4 @@ def r2_score(predictions: np.ndarray, targets: np.ndarray, eps: float = 1e-8) ->
     target_mean = np.mean(targets)
     ss_res = np.sum((targets - predictions) ** 2)
     ss_tot = np.sum((targets - target_mean) ** 2)
-    result = 1.0 - ss_res / (ss_tot + eps)
-    return np.array(result)
+    return 1.0 - ss_res / (ss_tot + eps)

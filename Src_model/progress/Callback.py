@@ -19,9 +19,9 @@ def save_checkpoint_callback(out_dir):
 
     f1_checkpoint_callback = ModelCheckpoint(
         dirpath=os.path.join(out_dir, "checkpoints"),
-        filename='best_f1s',
-        monitor='val_epoch_f1s',
-        mode='max', 
+        filename='best_rmse',
+        monitor='val_epoch_rmse',
+        mode='min',
         save_top_k=1,
         verbose=True   
     )
