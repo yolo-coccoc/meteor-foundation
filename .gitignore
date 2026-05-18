@@ -4,6 +4,8 @@ Test.ipynb
 *.xlsx
 *.pyc
 
+lightning_logs/
 wandb/
 Data/
+
 model_result
