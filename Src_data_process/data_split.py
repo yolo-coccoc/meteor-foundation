@@ -63,9 +63,9 @@ def save_splits(
 ) -> tuple[Path, Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    train_path = output_dir / f"{base_name}_train.csv"
-    val_path = output_dir / f"{base_name}_val.csv"
-    test_path = output_dir / f"{base_name}_test.csv"
+    train_path = output_dir / "train.csv"
+    val_path = output_dir / "val.csv"
+    test_path = output_dir / "test.csv"
 
     train_df.to_csv(train_path, index=False)
     val_df.to_csv(val_path, index=False)
@@ -75,7 +75,7 @@ def save_splits(
 
 
 def main() -> None:
-    input_csv = Path("/N/slate/tnn3/DucHGA/meteor-foundation/Data/merra/dataset/sample_dataset/full_dataset.csv")
+    input_csv = Path("/N/slate/tnn3/DucHGA/meteor-foundation/Data/merra/dataset/sample_dataset_pt/full.csv")
     datetime_column = "Datetime"
     train_val_start_year = 1980
     train_val_end_year = 2016
@@ -101,6 +101,7 @@ def main() -> None:
     train_df, val_df = split_train_val(train_val_df, val_ratio=val_ratio, random_seed=random_seed)
 
     output_dir = input_csv.parent
+    print(output_dir)
     base_name = input_csv.stem
     train_path, val_path, test_path = save_splits(train_df, val_df, test_df, output_dir, base_name)
 
