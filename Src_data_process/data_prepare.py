@@ -38,9 +38,10 @@ def add_label_paths_with_lead_time(df: pd.DataFrame,
         """Generate label path from current path + lead_time; check if exists"""
         # Extract directory and filename
 
+        ext = os.path.splitext(row[path_col])[-1]
         label_path = row[path_col][: -17]  # Remove last 17 chars (e.g., "YYYYMMDD_HH_MM.nc")
         label_datetime = row[datetime_col] + row["_lead_time"] * step
-        label_path = f"{label_path}{label_datetime.strftime('%Y%m%d_%H_%M')}.nc"
+        label_path = f"{label_path}{label_datetime.strftime('%Y%m%d_%H_%M')}{ext}"
         
         # Return path only if file exists, otherwise NaN
         return label_path if os.path.exists(label_path) else np.nan
@@ -67,8 +68,8 @@ def add_label_paths_with_lead_time(df: pd.DataFrame,
 
 if __name__ == "__main__":
     # Input/Output paths
-    CSV_INPUT_PATH = "/N/slate/tnn3/DucHGA/meteor-foundation/Data/merra/base/full_path.csv"
-    CSV_OUTPUT_PATH = "/N/slate/tnn3/DucHGA/meteor-foundation/Data/merra/dataset/sample.csv"
+    CSV_INPUT_PATH = "/N/slate/tnn3/DucHGA/meteor-foundation/Data/merra/base/full_path_pt.csv"
+    CSV_OUTPUT_PATH = "/N/slate/tnn3/DucHGA/meteor-foundation/Data/merra/dataset/sample_dataset_pt/full.csv"
     
     # Lead time and time step configuration
     LIST_LEAD_TIME = [1]  # Lead time multipliers
